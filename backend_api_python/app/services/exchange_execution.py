@@ -105,8 +105,11 @@ def load_strategy_configs(strategy_id: int) -> Dict[str, Any]:
             """,
             (int(strategy_id),),
         )
-        row = cur.fetchone() or {}
+        row = cur.fetchone()
         cur.close()
+
+    if not row:
+        raise LookupError("strategyV2.strategyNotFound")
 
     exchange_config = _safe_json_loads(row.get("exchange_config"), {})
     trading_config = _safe_json_loads(row.get("trading_config"), {})

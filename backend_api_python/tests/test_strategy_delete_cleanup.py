@@ -85,6 +85,8 @@ def test_delete_strategy_removes_all_runtime_references_in_one_transaction(monke
     ):
         assert f"DELETE FROM {table}" in sql
     assert "UPDATE qd_execution_events AS event" in sql
+    assert "NULLIF(payload_json, '')::jsonb" in sql
+    assert (42, "42") in [params for _statement, params in cursor.statements]
     assert "UPDATE qd_strategy_commands SET status = 'cancelled'" in sql
     assert "UPDATE qd_backtest_runs SET strategy_id = NULL" in sql
     assert "UPDATE qd_backtest_trades SET strategy_id = NULL" in sql
@@ -120,15 +122,12 @@ def test_delete_strategy_returns_false_without_touching_orphans_for_wrong_owner(
     assert connection.rolled_back is True
 
 
-def test_schema_installs_trigger_and_repairs_preexisting_orphans():
+def test_schema_installs_strategy_delete_trigger_without_history_repair():
     migrations = Path(__file__).resolve().parents[1] / "migrations"
-    for path in (
-        migrations / "init.sql",
-        migrations / "20261001_strategy_delete_cleanup.sql",
-    ):
-        sql = path.read_text(encoding="utf-8")
-        assert "CREATE OR REPLACE FUNCTION qd_cleanup_deleted_strategy()" in sql
-        assert "BEFORE DELETE ON qd_strategies_trading" in sql
-        assert "DELETE FROM qd_live_order_bindings AS binding" in sql
-        assert "DELETE FROM qd_strategy_runtime_leases AS lease" in sql
-        assert "process_error = 'strategy_deleted'" in sql
+    sql = (migrations / "init.sql").read_text(encoding="utf-8")
+    assert "CREATE OR REPLACE FUNCTION qd_cleanup_deleted_strategy()" in sql
+    assert "BEFORE DELETE ON qd_strategies_trading" in sql
+    assert "NULLIF(payload_json, '')::jsonb" in sql
+    assert "process_error = 'strategy_deleted'" in sql
+    assert "Repair orphan rows created before deletion cleanup became transactional" not in sql
+    assert not (migrations / "20261001_strategy_delete_cleanup.sql").exists()

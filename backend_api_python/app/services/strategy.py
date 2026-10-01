@@ -371,7 +371,14 @@ class StrategyService:
             """,
             (strategy_id,),
         )
-        cur.execute("DELETE FROM pending_orders WHERE strategy_id = ?", (strategy_id,))
+        cur.execute(
+            """
+            DELETE FROM pending_orders
+            WHERE strategy_id = ?
+               OR (NULLIF(payload_json, '')::jsonb ->> 'strategy_id') = ?
+            """,
+            (strategy_id, str(strategy_id)),
+        )
         cur.execute("DELETE FROM qd_live_order_bindings WHERE strategy_id = ?", (strategy_id,))
         cur.execute(
             """
