@@ -386,7 +386,6 @@ class NativeCryptoPublicClient:
             host = "https://fapi.binance.com" if self.market_type == "swap" else "https://api.binance.com"
             path = "/fapi/v1/ticker/24hr" if self.market_type == "swap" else "/api/v3/ticker/24hr"
             row = self._get(host + path, {"symbol": native})
-            percentage = _float(row.get("change24h")) * 100
             return _ticker(
                 symbol=canonical,
                 last=row.get("lastPrice"),
@@ -448,13 +447,14 @@ class NativeCryptoPublicClient:
             row = rows[0] if isinstance(rows, list) and rows else rows
             if not isinstance(row, dict):
                 raise NativeCryptoAPIError(f"symbol not found: {native}")
+            change_24h = row.get("change24h")
             return _ticker(
                 symbol=canonical,
                 last=row.get("lastPr") or row.get("last"),
                 open_price=row.get("open"),
                 high=row.get("high24h"),
                 low=row.get("low24h"),
-                percentage=percentage,
+                percentage=_float(change_24h) * 100 if change_24h is not None else None,
                 quote_volume=row.get("quoteVolume"),
                 timestamp=row.get("ts") or payload.get("requestTime"),
             )

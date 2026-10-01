@@ -1771,17 +1771,27 @@ def admin_delete_system_strategy():
 
         from app import get_trading_executor
         from app.routes.strategy import get_strategy_service
+        from app.services.strategy import StrategyDeleteBlocked
 
         svc = get_strategy_service()
         st = svc.get_strategy(strategy_id)
         if not st:
             return jsonify({'code': 0, 'msg': 'Strategy not found', 'data': None}), 404
 
-        if str(st.get('status') or '').strip().lower() == 'running':
-            svc.update_strategy_status(strategy_id, 'stopped')
-            get_trading_executor().stop_strategy(strategy_id, persist_status=False)
+        executor = get_trading_executor()
+        if str(st.get('status') or '').strip().lower() == 'running' or executor.is_running(strategy_id):
+            stop_result = executor.stop_strategy_with_policy(strategy_id, close_positions=False)
+            if str(stop_result.get('status') or '') != 'stopped':
+                return jsonify({
+                    'code': 0,
+                    'msg': 'strategyV2.stopBeforeDelete',
+                    'data': {'id': strategy_id, **stop_result},
+                }), 409
 
-        ok = svc.delete_strategy(strategy_id)
+        try:
+            ok = svc.delete_strategy(strategy_id)
+        except StrategyDeleteBlocked as exc:
+            return jsonify({'code': 0, 'msg': str(exc), 'data': {'id': strategy_id}}), 409
         if not ok:
             return jsonify({'code': 0, 'msg': 'Failed to delete strategy', 'data': None}), 500
 

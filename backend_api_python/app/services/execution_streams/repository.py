@@ -245,6 +245,14 @@ class ExecutionEventRepository:
                 FROM qd_live_order_bindings
                 WHERE credential_id = %s
                   AND exchange_id = %s
+                  AND (
+                    strategy_id <= 0
+                    OR EXISTS (
+                      SELECT 1
+                      FROM qd_strategies_trading AS strategy
+                      WHERE strategy.id = qd_live_order_bindings.strategy_id
+                    )
+                  )
                   AND (market_type = %s OR market_type = '' OR %s = ''
                     OR (market_type IN ('crypto', 'spot') AND %s IN ('crypto', 'spot')))
                   AND (symbol = '' OR regexp_replace(upper(symbol), '[-/_]', '', 'g') = %s)

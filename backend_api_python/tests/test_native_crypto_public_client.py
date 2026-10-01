@@ -142,3 +142,35 @@ def test_bybit_spot_catalog_does_not_send_unsupported_pagination(monkeypatch):
 
     assert "BTC/USDT" in markets
     assert captured == [{"category": "spot"}]
+
+
+@pytest.mark.parametrize("market_type", ["spot", "swap"])
+def test_bitget_ticker_parses_change_rate_without_unbound_state(market_type, monkeypatch):
+    client = NativeCryptoPublicClient("bitget", market_type)
+    monkeypatch.setattr(
+        client,
+        "_get",
+        lambda *_args, **_kwargs: {
+            "code": "00000",
+            "requestTime": 1700000000000,
+            "data": [
+                {
+                    "symbol": "BTCUSDT",
+                    "lastPr": "101.25",
+                    "open": "100",
+                    "high24h": "103",
+                    "low24h": "99",
+                    "change24h": "0.0125",
+                    "quoteVolume": "2500000",
+                    "ts": "1700000000123",
+                }
+            ],
+        },
+    )
+
+    ticker = client.fetch_ticker("BTC/USDT")
+
+    assert ticker["last"] == 101.25
+    assert ticker["percentage"] == 1.25
+    assert ticker["changePercent"] == 1.25
+    assert ticker["timestamp"] == 1700000000123

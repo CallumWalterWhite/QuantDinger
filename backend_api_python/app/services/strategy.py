@@ -24,6 +24,11 @@ class StrategyLimitExceeded(Exception):
         self.running = int(running)
 
 
+class StrategyDeleteBlocked(Exception):
+    def __init__(self):
+        super().__init__("strategyV2.stopBeforeDelete")
+
+
 def _strip_legacy_risk_pct_basis(value: Any) -> Any:
     if isinstance(value, dict):
         return {
@@ -278,11 +283,119 @@ class StrategyService:
             values.append(int(user_id))
         with get_db_connection() as db:
             cur = db.cursor()
-            cur.execute(f"DELETE FROM qd_strategies_trading WHERE {where}", tuple(values))
-            changed = int(cur.rowcount or 0)
-            db.commit()
-            cur.close()
+            try:
+                cur.execute(
+                    f"SELECT id FROM qd_strategies_trading WHERE {where} FOR UPDATE",
+                    tuple(values),
+                )
+                if not cur.fetchone():
+                    db.rollback()
+                    return False
+
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM qd_strategy_runtime_leases
+                    WHERE strategy_id = ? AND lease_expires_at >= NOW()
+                    LIMIT 1
+                    """,
+                    (int(strategy_id),),
+                )
+                active_lease = bool(cur.fetchone())
+                if active_lease:
+                    raise StrategyDeleteBlocked()
+
+                cur.execute(
+                    """
+                    UPDATE qd_strategy_commands
+                    SET status = 'cancelled',
+                        completed_at = COALESCE(completed_at, NOW()),
+                        updated_at = NOW(),
+                        error_message = CASE
+                            WHEN error_message = '' THEN 'strategy_deleted'
+                            ELSE error_message
+                        END
+                    WHERE strategy_id = ?
+                      AND (
+                        status = 'pending'
+                        OR (status = 'processing' AND lease_expires_at < NOW())
+                      )
+                    """,
+                    (int(strategy_id),),
+                )
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM qd_strategy_commands
+                    WHERE strategy_id = ?
+                      AND status = 'processing'
+                      AND COALESCE(lease_expires_at, NOW()) >= NOW()
+                    LIMIT 1
+                    """,
+                    (int(strategy_id),),
+                )
+                if cur.fetchone():
+                    raise StrategyDeleteBlocked()
+
+                self._cleanup_strategy_references(cur, int(strategy_id))
+                cur.execute(f"DELETE FROM qd_strategies_trading WHERE {where}", tuple(values))
+                changed = int(cur.rowcount or 0)
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
+            finally:
+                cur.close()
         return changed > 0
+
+    @staticmethod
+    def _cleanup_strategy_references(cur, strategy_id: int) -> None:
+        cur.execute(
+            """
+            UPDATE qd_execution_events AS event
+            SET processed_at = COALESCE(event.processed_at, NOW()),
+                process_error = 'strategy_deleted',
+                next_attempt_at = NOW()
+            WHERE event.processed_at IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM qd_live_order_bindings AS binding
+                WHERE binding.strategy_id = ?
+                  AND binding.credential_id = event.credential_id
+                  AND LOWER(binding.exchange_id) = LOWER(event.exchange_id)
+                  AND (
+                    (event.exchange_order_id <> '' AND binding.exchange_order_id = event.exchange_order_id)
+                    OR (event.client_order_id <> '' AND binding.client_order_id = event.client_order_id)
+                  )
+              )
+            """,
+            (strategy_id,),
+        )
+        cur.execute("DELETE FROM pending_orders WHERE strategy_id = ?", (strategy_id,))
+        cur.execute("DELETE FROM qd_live_order_bindings WHERE strategy_id = ?", (strategy_id,))
+        cur.execute(
+            """
+            DELETE FROM strategy_runtime_locks
+            WHERE strategy_run_id IN (
+                SELECT id FROM strategy_runs WHERE strategy_id = ?
+            )
+            """,
+            (strategy_id,),
+        )
+        for table in (
+            "strategy_order_fills",
+            "strategy_order_intents",
+            "strategy_runtime_state",
+            "strategy_runtime_events",
+            "strategy_runs",
+            "qd_strategy_commands",
+            "qd_strategy_runtime_leases",
+        ):
+            cur.execute(f"DELETE FROM {table} WHERE strategy_id = ?", (strategy_id,))
+
+        cur.execute("UPDATE qd_backtest_runs SET strategy_id = NULL WHERE strategy_id = ?", (strategy_id,))
+        cur.execute("UPDATE qd_backtest_trades SET strategy_id = NULL WHERE strategy_id = ?", (strategy_id,))
+        cur.execute("UPDATE qd_indicator_codes SET source_strategy_id = NULL WHERE source_strategy_id = ?", (strategy_id,))
 
     def batch_start_strategies(self, strategy_ids: List[int], user_id: int | None = None) -> Dict[str, Any]:
         return self._batch_status(strategy_ids, "running", user_id)
@@ -291,8 +404,22 @@ class StrategyService:
         return self._batch_status(strategy_ids, "stopped", user_id)
 
     def batch_delete_strategies(self, strategy_ids: List[int], user_id: int | None = None) -> Dict[str, Any]:
-        deleted = [int(item) for item in strategy_ids if self.delete_strategy(int(item), user_id=user_id)]
-        return {"success": len(deleted) == len(strategy_ids), "deleted_ids": deleted}
+        deleted: list[int] = []
+        failed: list[dict[str, Any]] = []
+        for item in strategy_ids:
+            strategy_id = int(item)
+            try:
+                if self.delete_strategy(strategy_id, user_id=user_id):
+                    deleted.append(strategy_id)
+                else:
+                    failed.append({"id": strategy_id, "error": "strategyV2.strategyNotFound"})
+            except StrategyDeleteBlocked as exc:
+                failed.append({"id": strategy_id, "error": str(exc)})
+        return {
+            "success": not failed,
+            "deleted_ids": deleted,
+            "failed_ids": failed,
+        }
 
     def get_exchange_symbols(self, exchange_config: Dict[str, Any], user_id: int = 1) -> Dict[str, Any]:
         from app.services.exchange_execution import resolve_exchange_config

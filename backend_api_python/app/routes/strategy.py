@@ -212,10 +212,15 @@ def update_strategy(strategy_id: int):
 @strategy_blp.route("/strategies/<int:strategy_id>", methods=["DELETE"])
 @login_required
 def delete_strategy(strategy_id: int):
+    from app.services.strategy import StrategyDeleteBlocked
+
     if get_trading_executor().is_running(strategy_id):
         return _error("strategyV2.stopBeforeDelete", 409)
-    if not get_strategy_service().delete_strategy(strategy_id, user_id=int(g.user_id)):
-        return _error("strategyV2.strategyNotFound", 404)
+    try:
+        if not get_strategy_service().delete_strategy(strategy_id, user_id=int(g.user_id)):
+            return _error("strategyV2.strategyNotFound", 404)
+    except StrategyDeleteBlocked as exc:
+        return _error(str(exc), 409)
     return _ok({"id": strategy_id}, "strategyV2.deleted")
 
 
