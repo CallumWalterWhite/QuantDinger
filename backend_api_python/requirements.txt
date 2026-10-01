@@ -47,8 +47,8 @@ flask-smorest>=0.47.0,<0.48
 marshmallow>=4.3.0,<5
 PyYAML>=6.0.3
 # Server-side PDF export for AI analysis reports
-# PDF resource exhaustion and malformed-stream advisories; 6.16.2+
-pypdf>=6.16.2,<7
+# PDF parser security advisories; 6.19.0+
+pypdf>=6.19.0,<7
 reportlab>=5.0.0
 # Password hashing
 bcrypt>=5.0.0
