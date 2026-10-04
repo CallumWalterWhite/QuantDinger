@@ -31,6 +31,7 @@ _PREFIX_TAGS: list[tuple[str, str]] = [
     ("/api/bots", "Strategy"),
     ("/api/credentials", "Credentials"),
     ("/api/dashboard", "Dashboard"),
+    ("/api/events", "Events"),
     ("/api/settings", "Settings"),
     ("/api/portfolio", "Portfolio"),
     ("/api/ibkr", "IBKR"),
@@ -84,6 +85,7 @@ def register_human_blueprints(api: Api) -> None:
     from app.routes.billing import billing_blp
     from app.routes.quick_trade import quick_trade_blp
     from app.routes.quick_trade_event_radar import quick_trade_event_radar_blp
+    from app.routes.events import events_blp
 
     registrations: list[tuple] = [
         (health_blp, ""),
@@ -103,6 +105,7 @@ def register_human_blueprints(api: Api) -> None:
         (strategy_blp, "/api"),
         (credentials_blp, "/api/credentials"),
         (dashboard_blp, "/api/dashboard"),
+        (events_blp, "/api/events"),
         (settings_blp, "/api/settings"),
         (portfolio_blp, "/api/portfolio"),
         (ibkr_blp, "/api/ibkr"),

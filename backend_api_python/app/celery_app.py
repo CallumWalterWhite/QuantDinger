@@ -47,8 +47,11 @@ celery_app.conf.update(
         "app.tasks.fast_analysis",
         "app.tasks.maintenance",
         "app.tasks.fundamental_sync",
+        "app.tasks.event_digest",
     ),
     task_routes={
+        "quantdinger.tasks.earnings_calendar_sync": {"queue": "maintenance"},
+        "quantdinger.tasks.pre_event_digest": {"queue": "ai"},
         "quantdinger.tasks.fast_analysis": {"queue": "ai"},
         "quantdinger.tasks.agent_job": {"queue": "jobs"},
         "quantdinger.tasks.expire_agent_jobs": {"queue": "maintenance"},
@@ -60,6 +63,12 @@ celery_app.conf.update(
         "quantdinger.tasks.cleanup_runtime_metadata": {"queue": "maintenance"},
     },
     beat_schedule={
+        "earnings-calendar-sync": {
+            "task": "quantdinger.tasks.earnings_calendar_sync", "schedule": 86400.0,
+        },
+        "pre-event-digest": {
+            "task": "quantdinger.tasks.pre_event_digest", "schedule": 3600.0,
+        },
         "fundamental-sync": {
             "task": "quantdinger.tasks.fundamental_sync_tick",
             "schedule": 60.0,

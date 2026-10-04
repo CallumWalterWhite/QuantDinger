@@ -25,6 +25,7 @@ IBKR = "IBKR"
 ALPACA = "Alpaca"
 
 ALL_TAGS = [
+    {"name": "Events", "description": "Upcoming earnings and research digests (Internal)"},
     {"name": HEALTH, "description": "Liveness and API metadata (Public)"},
     {"name": POLICY, "description": "Capability and broker policy discovery (Public)"},
     {"name": AUTH, "description": "Authentication and OAuth (Public)"},

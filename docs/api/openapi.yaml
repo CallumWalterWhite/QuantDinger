@@ -657,6 +657,8 @@ components:
 tags:
 - name: Health
   description: Liveness and API metadata (Public)
+- name: Events
+  description: Upcoming earnings and research digests (Internal)
 - name: Policy
   description: Capability and broker policy discovery (Public)
 - name: Auth
@@ -5697,6 +5699,87 @@ paths:
       schema:
         type: integer
         minimum: 0
+  /api/events/upcoming:
+    get:
+      responses:
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanErrorEnvelope'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+      summary: Get Api Events Upcoming
+      tags:
+      - Events
+      operationId: getApiEventsUpcoming
+      description: Upcoming earnings for the current user's US-stock watchlist and
+        manual positions.
+      x-visibility: internal
+  /api/events/digests:
+    get:
+      responses:
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanErrorEnvelope'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+      summary: Pre-event digest history for the current user, newest first.
+      tags:
+      - Events
+      operationId: getApiEventsDigests
+      x-visibility: internal
+  /api/events/digest-settings:
+    get:
+      responses:
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanErrorEnvelope'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+      summary: Current user's digest preferences plus the global master switch.
+      tags:
+      - Events
+      operationId: getApiEventsDigestSettings
+      x-visibility: internal
+    put:
+      responses:
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanErrorEnvelope'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+      summary: Save the current user's digest preferences.
+      tags:
+      - Events
+      operationId: putApiEventsDigestSettings
+      x-visibility: internal
   /api/settings/schema:
     get:
       responses:
