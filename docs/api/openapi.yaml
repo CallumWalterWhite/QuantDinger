@@ -5800,6 +5800,349 @@ paths:
       - Events
       operationId: putApiEventsDigestSettings
       x-visibility: internal
+  /api/events/research/coverage:
+    get:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Events
+      security:
+      - HumanJWT: []
+      parameters:
+      - in: query
+        name: market
+        schema:
+          type: string
+          enum:
+          - all
+          - US
+          - UK
+          default: all
+      - in: query
+        name: days
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 90
+          default: 30
+      operationId: getApiEventsResearchCoverage
+      summary: Get Api Events Research Coverage
+      x-visibility: internal
+  /api/events/research/listings:
+    get:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Events
+      security:
+      - HumanJWT: []
+      parameters:
+      - in: query
+        name: page
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          default: 1
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - in: query
+        name: market
+        schema:
+          type: string
+          enum:
+          - all
+          - US
+          - UK
+          default: all
+      - in: query
+        name: days
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 90
+          default: 30
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+      - in: query
+        name: state
+        schema:
+          type: string
+          enum:
+          - ready
+          - partial
+          - stale
+          - no_data
+          - unsupported
+      - in: query
+        name: mode
+        schema:
+          type: string
+          enum:
+          - directory
+          - candidates
+          default: directory
+      operationId: getApiEventsResearchListings
+      summary: Get Api Events Research Listings
+      x-visibility: internal
+  /api/events/research/listings/{listing_id}/evidence:
+    get:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Events
+      security:
+      - HumanJWT: []
+      operationId: getApiEventsResearchListingsListingIdEvidence
+      summary: Get Api Events Research Listings Listing Id Evidence
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: integer
+      x-visibility: internal
+    parameters:
+    - in: path
+      name: listing_id
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+  /api/events/research/listings/{listing_id}/source:
+    put:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Events
+      security:
+      - HumanJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                issuer_url:
+                  type: string
+                  maxLength: 8192
+                confirmed:
+                  type: boolean
+              required:
+              - issuer_url
+              - confirmed
+      operationId: putApiEventsResearchListingsListingIdSource
+      summary: Put Api Events Research Listings Listing Id Source
+      parameters:
+      - name: listing_id
+        in: path
+        required: true
+        schema:
+          type: integer
+      x-visibility: internal
+    parameters:
+    - in: path
+      name: listing_id
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+  /api/events/research/jobs:
+    post:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Events
+      security:
+      - HumanJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                market:
+                  type: string
+                  enum:
+                  - all
+                  - US
+                  - UK
+                days:
+                  type: integer
+                  minimum: 1
+                  maximum: 90
+                request_id:
+                  type: string
+                  maxLength: 100
+              required:
+              - market
+              - request_id
+      operationId: postApiEventsResearchJobs
+      summary: Post Api Events Research Jobs
+      x-visibility: internal
+  /api/events/research/jobs/{job_id}:
+    get:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Events
+      security:
+      - HumanJWT: []
+      parameters:
+      - in: query
+        name: page
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          default: 1
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: integer
+      operationId: getApiEventsResearchJobsJobId
+      summary: Get Api Events Research Jobs Job Id
+      x-visibility: internal
+    parameters:
+    - in: path
+      name: job_id
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+  /api/events/research/jobs/{job_id}/cancel:
+    post:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Events
+      security:
+      - HumanJWT: []
+      operationId: postApiEventsResearchJobsJobIdCancel
+      summary: Post Api Events Research Jobs Job Id Cancel
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: integer
+      x-visibility: internal
+    parameters:
+    - in: path
+      name: job_id
+      required: true
+      schema:
+        type: integer
+        minimum: 0
   /api/settings/schema:
     get:
       responses:

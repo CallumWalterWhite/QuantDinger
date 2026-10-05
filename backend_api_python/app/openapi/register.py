@@ -87,6 +87,7 @@ def register_human_blueprints(api: Api) -> None:
     from app.routes.quick_trade import quick_trade_blp
     from app.routes.quick_trade_event_radar import quick_trade_event_radar_blp
     from app.routes.events import events_blp
+    import app.routes.earnings_research  # noqa: F401 - extend the existing events blueprint
 
     registrations: list[tuple] = [
         (health_blp, ""),

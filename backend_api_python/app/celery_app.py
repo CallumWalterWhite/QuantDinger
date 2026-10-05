@@ -50,6 +50,7 @@ celery_app.conf.update(
         "app.tasks.event_digest",
         "app.tasks.market_earnings",
         "app.tasks.research_ingestion",
+        "app.tasks.earnings_research",
     ),
     task_routes={
         "quantdinger.tasks.earnings_calendar_sync": {"queue": "maintenance"},
@@ -63,6 +64,7 @@ celery_app.conf.update(
         "quantdinger.tasks.market_catalog_sync": {"queue": "maintenance"},
         "quantdinger.tasks.fundamental_sync_tick": {"queue": "maintenance"},
         "quantdinger.tasks.research_ingestion_tick": {"queue": "maintenance"},
+        "quantdinger.tasks.earnings_research_tick": {"queue": "maintenance"},
         "quantdinger.tasks.worker_heartbeat": {"queue": "maintenance"},
         "quantdinger.tasks.cleanup_runtime_metadata": {"queue": "maintenance"},
     },

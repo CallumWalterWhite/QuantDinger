@@ -171,6 +171,13 @@ def claim_one():
         cur.execute("SELECT 1 FROM qd_research_ingestion_items WHERE status='running' LIMIT 1")
         if cur.fetchone():
             return None
+        # Coordinate with optional advisory Yahoo collection. Older disposable
+        # schemas do not contain the additive evidence migration.
+        cur.execute("SELECT to_regclass('qd_earnings_research_lease') AS table_name")
+        if cur.fetchone()['table_name']:
+            cur.execute("SELECT 1 FROM qd_earnings_research_lease WHERE (lease_until>NOW() OR cooldown_until>NOW()) AND kind IN ('prices','news') LIMIT 1")
+            if cur.fetchone():
+                return None
         cur.execute('SELECT 1 FROM qd_research_ingestion_schedules WHERE cooldown_until>NOW() LIMIT 1')
         if cur.fetchone():
             return None
@@ -198,8 +205,11 @@ def claim_one():
                 _finish(cur)
                 return {'skipped': True}
         token = uuid4().hex
+        cur.execute('SELECT market,exchange,provider_symbol,symbol,name,is_active FROM qd_earnings_listings WHERE id=?', (row['listing_id'],))
+        current = cur.fetchone()
+        identity = {key: current[key] for key in ('market','exchange','provider_symbol','symbol','name')}
         cur.execute("UPDATE qd_research_ingestion_items SET status='running',attempts=attempts+1,token=?,lease_until=NOW()+INTERVAL '4 minutes',updated_at=NOW() WHERE id=?", (token, row['id']))
-        return {**dict(row), 'token': token, 'attempts': row['attempts'] + 1}
+        return {**dict(row), 'token': token, 'attempts': row['attempts'] + 1, 'identity': identity}
 
 
 def publish(item, observations=None, error=None):
@@ -209,6 +219,19 @@ def publish(item, observations=None, error=None):
         owned = cur.fetchone()
         if not owned:
             return False
+        identity = item.get('identity')
+        if not error and identity:
+            # New observations carry immutable issuer provenance. Older rows
+            # remain untouched and cannot be promoted to verified research.
+            cur.execute('LOCK TABLE qd_earnings_listings,qd_market_earnings IN SHARE MODE')
+            cur.execute('SELECT * FROM qd_earnings_listings WHERE id=?', (item['listing_id'],))
+            current = cur.fetchone()
+            cur.execute('SELECT COUNT(*) AS n FROM qd_earnings_listings WHERE is_active AND market=? AND provider_symbol=?', (identity['market'], identity['provider_symbol']))
+            ambiguous = cur.fetchone()['n'] > 1
+            if (ambiguous or not current['is_active']
+                    or any(current[key] != value for key, value in identity.items())
+                    or any(identity[key] != item[key] for key in ('market','exchange','provider_symbol','symbol'))):
+                error = FinancialUnavailable('catalog_identity_changed')
         coverage = {}
         if error:
             transient = isinstance(error, FinancialRetryable)
@@ -219,6 +242,12 @@ def publish(item, observations=None, error=None):
         else:
             status, reason = 'success', ''
             for row in observations:
+                if identity:
+                    import hashlib
+                    version = hashlib.sha256((row['source_version'] + json.dumps(identity, sort_keys=True)).encode()).hexdigest()
+                    row = {**row,
+                           'source': f"research_yahoo_{row['frequency']}:{version[:16]}",
+                           'metadata': {**row['metadata'], 'listingIdentity': identity}}
                 # Preserve first observation, including same-day revisions as distinct sources.
                 cur.execute('''SELECT 1 FROM qd_fundamental_snapshots WHERE market=? AND symbol=?
                     AND period_end=? AND source=? AND source_version=? LIMIT 1''',
