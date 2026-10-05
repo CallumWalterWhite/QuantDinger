@@ -103,6 +103,15 @@ def test_save_settings_upserts_and_validates(monkeypatch):
     assert result == {"enabled": False, "lead_days": 5, "global_enabled": True}
 
 
+def test_market_calendar_never_rolls_back_an_outer_write_transaction(monkeypatch):
+    db = _use(monkeypatch, FakeDB())
+    db.rollback_only = False
+    with pytest.raises(RuntimeError, match="independent_connection"):
+        module.list_market_earnings()
+    assert db.rollback_only is False
+    assert db.statements == []
+
+
 @pytest.mark.parametrize("bad", [-1, 8, "3", 2.5, None, True])
 def test_save_settings_rejects_bad_lead_days(monkeypatch, bad):
     _use(monkeypatch, FakeDB())

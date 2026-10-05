@@ -64,6 +64,11 @@ def postgres(monkeypatch):
         try:
             with raw.cursor() as cur:
                 cur.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+            raw.commit()
+            # Match production pool checkout: its health probe opens a read transaction.
+            with raw.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
             yield Connection(raw, RealDictCursor)
         finally:
             # Roll back open reads and failed writes; only explicit commits persist.

@@ -41,6 +41,11 @@ def list_market_earnings(*, market="all", days=30, query="", page=1, page_size=5
         args.extend((pattern, pattern))
     source = " FROM qd_market_earnings e JOIN qd_earnings_listings l ON l.id = e.listing_id WHERE " + condition
     with get_db_connection() as db:
+        if hasattr(db, "rollback_only"):
+            raise RuntimeError("market_calendar_requires_independent_connection")
+        # Pool checkout's SELECT 1 starts a transaction. Clear that read-only
+        # probe before starting this reader's snapshot, never an outer writer.
+        db.rollback()
         cur = db.cursor()
         # Rows, totals and coverage describe the same atomically published snapshot.
         cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
