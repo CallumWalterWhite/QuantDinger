@@ -5721,6 +5721,26 @@ paths:
       description: Upcoming earnings for the current user's US-stock watchlist and
         manual positions.
       x-visibility: internal
+  /api/events/market-calendar:
+    get:
+      responses:
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanErrorEnvelope'
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+      summary: Cached best-effort US/UK earnings, with search, pagination and coverage.
+      tags:
+      - Events
+      operationId: getApiEventsMarketCalendar
+      x-visibility: internal
   /api/events/digests:
     get:
       responses:

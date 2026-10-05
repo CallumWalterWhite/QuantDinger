@@ -16,6 +16,7 @@ import pytest
 
 from app.data_providers import earnings_calendar
 from app.services import event_digest_repository, events_read, pre_event_digest, upcoming_events, user_preferences
+from app.services import market_earnings as market_service
 from app.utils.db_postgres import PostgresCursor
 
 
@@ -94,11 +95,11 @@ def postgres(monkeypatch):
             """)
             migrations = Path(__file__).resolve().parents[1] / "migrations"
             for _ in range(2):
-                for filename in ("20261001_earnings_digest.sql", "20261004_event_digest_settings.sql"):
+                for filename in ("20261001_earnings_digest.sql", "20261004_event_digest_settings.sql", "20261005_market_earnings.sql"):
                     cur.execute((migrations / filename).read_text())
             db.commit()
             cur.close()
-        for module in (event_digest_repository, events_read, upcoming_events, user_preferences):
+        for module in (event_digest_repository, events_read, upcoming_events, user_preferences, market_service):
             monkeypatch.setattr(module, "get_db_connection", connect)
         yield connect
     finally:
@@ -343,3 +344,99 @@ def test_uncertain_external_send_is_not_retried(postgres, monkeypatch, initial):
         assert deliver(repo, repo.get(item()), settings) == {"telegram": "unknown"}
     assert len(calls) == (0 if initial else 1)
     assert events_read.list_digests_for_user(1) == []
+
+
+def market_snapshot(market="UK", symbol="TSCO.L", offset=4):
+    directory = {"items": [{"market": market, "exchange": "LSE" if market == "UK" else "NMS",
+                            "symbol": symbol, "provider_symbol": symbol, "name": "Tesco" if market == "UK" else "Tesla",
+                            "instrument_type": "equity_unverified", "segment": "unknown"}],
+                 "raw_count": 2, "excluded_count": 1}
+    calendar = {"items": [{"symbol": symbol, "event_type": "earnings", "event_date": TODAY + timedelta(days=offset),
+                           "reporting_period": "Interim results", "eps_estimate": None, "revenue_estimate": None,
+                           "estimate_currency": None, "date_status": "unknown", "source": "yahoo"}], "raw_count": 1}
+    return directory, calendar
+
+
+def publish_market(market="UK", symbol="TSCO.L", offset=4):
+    run_id = market_service.start_run(market, TODAY, TODAY + timedelta(days=90))
+    market_service.publish_snapshot(run_id, market, TODAY, TODAY + timedelta(days=90),
+                                    *market_snapshot(market, symbol, offset))
+    return run_id
+
+
+def test_market_discovery_without_watchlist_filters_pages_and_has_no_personal_data(postgres):
+    publish_market()
+    publish_market("US", "TSLA", 17)
+    result = events_read.list_market_earnings(today=TODAY, page_size=1)
+    assert result["total"] == 2 and result["items"][0]["symbol"] == "TSCO.L"
+    second = events_read.list_market_earnings(today=TODAY, page_size=1, page=2)
+    assert second["items"][0]["symbol"] == "TSLA"
+    assert all("user_id" not in r and "in_watchlist" not in r for r in result["items"])
+    assert events_read.list_market_earnings(today=TODAY, market="UK", query="tesco")["total"] == 1
+    assert events_read.list_market_earnings(today=TODAY, days=7, market="US")["total"] == 0
+    assert events_read.list_market_earnings(today=TODAY, query="%" )["total"] == 0
+    assert events_read.list_market_earnings(today=TODAY, query="' OR TRUE --")["total"] == 0
+    assert events_read.list_market_earnings(today=TODAY, page=1000000)["items"] == []
+
+
+def test_market_changed_dates_and_empty_snapshot_are_atomic_and_idempotent(postgres):
+    publish_market(offset=4)
+    publish_market(offset=6)
+    assert [r["event_date"] for r in rows(postgres, "SELECT event_date FROM qd_market_earnings")] == [TODAY + timedelta(days=6)]
+    run_id = market_service.start_run("UK", TODAY, TODAY + timedelta(days=90))
+    directory, _ = market_snapshot()
+    market_service.publish_snapshot(run_id, "UK", TODAY, TODAY + timedelta(days=90), directory, {"items": [], "raw_count": 0})
+    assert events_read.list_market_earnings(today=TODAY)["total"] == 0
+    assert events_read.list_market_earnings(today=TODAY)["coverage"][1]["status"] == "ready"
+
+
+def test_market_failed_publication_rolls_back_catalog_rows_and_metadata(postgres):
+    publish_market()
+    run_id = market_service.start_run("UK", TODAY, TODAY + timedelta(days=90))
+    directory, calendar = market_snapshot(offset=6)
+    directory["items"][0]["name"] = "Changed name"
+    calendar["items"][0]["date_status"] = "invalid"
+    with pytest.raises(Exception):
+        market_service.publish_snapshot(run_id, "UK", TODAY, TODAY + timedelta(days=90), directory, calendar)
+    market_service.fail_run(run_id)
+    result = events_read.list_market_earnings(today=TODAY, market="UK")
+    assert result["items"][0]["name"] == "Tesco" and result["items"][0]["days_until"] == 4
+    assert result["coverage"][0]["status"] == "degraded"
+
+
+def test_market_cache_never_enters_personal_calendar_or_digest_eligibility(postgres):
+    publish_market()
+    publish_market("US", "TSLA")
+    execute(postgres, "INSERT INTO qd_watchlist (user_id, symbol, market, name) VALUES (1, 'TSLA', 'USStock', 'Tesla')")
+    assert events_read.list_upcoming_for_user(1, today=TODAY) == []
+    assert event_digest_repository.DigestRepository().due_events(TODAY, 7) == []
+    assert rows(postgres, "SELECT * FROM qd_strategy_notifications") == []
+
+
+def test_market_identity_collision_is_not_guessed(postgres):
+    directory, calendar = market_snapshot("US", "ABC")
+    directory["items"].append({**directory["items"][0], "exchange": "NYQ"})
+    directory["raw_count"] = 3
+    run_id = market_service.start_run("US", TODAY, TODAY + timedelta(days=90))
+    result = market_service.publish_snapshot(run_id, "US", TODAY, TODAY + timedelta(days=90), directory, calendar)
+    assert result["unmapped_count"] == 1 and result["event_count"] == 0
+    assert len(rows(postgres, "SELECT * FROM qd_earnings_listings")) == 2
+
+
+def test_market_coverage_unavailable_stale_and_running(postgres):
+    assert all(r["status"] == "unavailable" for r in events_read.list_market_earnings(today=TODAY)["coverage"])
+    run_id = publish_market()
+    execute(postgres, "UPDATE qd_earnings_sync_runs SET finished_at = NOW() - INTERVAL '2 days' WHERE id = ?", (run_id,))
+    assert events_read.list_market_earnings(today=TODAY, market="UK")["coverage"][0]["status"] == "stale"
+    market_service.start_run("UK", TODAY, TODAY + timedelta(days=90))
+    result = events_read.list_market_earnings(today=TODAY, market="UK")
+    assert result["coverage"][0]["status"] == "refreshing" and result["total"] == 1
+    assert result["coverage"][0]["mode"] == "best_effort" and not result["coverage"][0]["venue_verified"]
+    execute(postgres, "UPDATE qd_earnings_sync_runs SET started_at = NOW() - INTERVAL '2 days' WHERE status = 'running'")
+    assert events_read.list_market_earnings(today=TODAY, market="UK")["coverage"][0]["status"] == "degraded"
+
+
+def test_market_lock_is_distributed_and_skips_network_work(postgres):
+    with market_service.event_batch_lock(2026100507) as acquired:
+        assert acquired
+        assert market_service.sync_market_earnings(directory=lambda *_: pytest.fail("provider called")) == {"skipped": True}

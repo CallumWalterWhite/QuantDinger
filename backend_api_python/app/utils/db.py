@@ -311,6 +311,10 @@ def _apply_init_sql(logger, *, strict: bool = False):
                 path=Path(__file__).resolve().parent.parent.parent / "migrations" / "20261004_event_digest_settings.sql",
             )
             _apply_migration_component(
+                conn, logger, name="market-earnings-20261005",
+                path=Path(__file__).resolve().parent.parent.parent / "migrations" / "20261005_market_earnings.sql",
+            )
+            _apply_migration_component(
                 conn,
                 logger,
                 name="quick-trade-client-order-id-20260926",

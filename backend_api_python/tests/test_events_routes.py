@@ -61,7 +61,7 @@ def test_routes_are_registered(client):
     assert {"/api/events/upcoming", "/api/events/digests", "/api/events/digest-settings"} <= rules
 
 
-@pytest.mark.parametrize("path", ["/api/events/upcoming", "/api/events/digests", "/api/events/digest-settings"])
+@pytest.mark.parametrize("path", ["/api/events/upcoming", "/api/events/digests", "/api/events/digest-settings", "/api/events/market-calendar"])
 def test_events_require_login(client, path):
     assert client.get(path).status_code == 401
 
@@ -70,3 +70,18 @@ def test_events_require_login(client, path):
 def test_settings_reject_non_object_or_non_boolean(app, payload):
     body, status = _call(app, routes.put_digest_settings, "/api/events/digest-settings", method="PUT", json=payload)
     assert status == 400 and body["code"] == 0
+
+
+@pytest.mark.parametrize("query", ["days=x", "days=0", "days=91", "page=0", "page=1.5", "page_size=201", "page_size=0", "market=Crypto", "q=" + "a" * 101])
+def test_market_calendar_rejects_invalid_arguments(app, query):
+    body, status = _call(app, routes.get_market_calendar, "/api/events/market-calendar?" + query)
+    assert status == 400 and body["code"] == 0
+
+
+def test_market_calendar_is_shared_but_authenticated(app, monkeypatch):
+    args = {}
+    monkeypatch.setattr(routes.events_read, "list_market_earnings", lambda **kwargs: args.update(kwargs) or {"items": [], "total": 0})
+    body, status = _call(app, routes.get_market_calendar,
+                         "/api/events/market-calendar?market=UK&days=7&q=Tesco&page=2&page_size=25&user_id=99")
+    assert status == 200 and body["data"]["items"] == []
+    assert args == {"market": "UK", "days": 7, "query": "Tesco", "page": 2, "page_size": 25}

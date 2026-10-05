@@ -5,12 +5,93 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from app.utils.db import get_db_connection
 
 DEFAULT_LEAD_DAYS = 3
+MARKET_STALE_AFTER = timedelta(hours=36)
+
+
+def validate_market_calendar(market, days, query, page, page_size):
+    if market not in {"all", "US", "UK"}:
+        raise ValueError("invalid_market")
+    for key, value, low, high in (("days", days, 1, 90), ("page", page, 1, 1000000), ("page_size", page_size, 1, 200)):
+        if type(value) is not int or not low <= value <= high:
+            raise ValueError("invalid_" + key)
+    if not isinstance(query, str) or len(query.strip()) > 100:
+        raise ValueError("invalid_query")
+
+
+def list_market_earnings(*, market="all", days=30, query="", page=1, page_size=50, today=None):
+    """Read cached public events without provider calls or personal metadata."""
+    validate_market_calendar(market, days, query, page, page_size)
+    today = today or date.today()
+    end = today + timedelta(days=days)
+    markets = ("US", "UK") if market == "all" else (market,)
+    condition = "l.is_active AND e.event_date BETWEEN ? AND ?"
+    args = [today, end]
+    if market != "all":
+        condition += " AND l.market = ?"
+        args.append(market)
+    if query.strip():
+        pattern = "%" + query.strip().replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
+        condition += " AND (l.symbol ILIKE ? ESCAPE '!' OR l.name ILIKE ? ESCAPE '!')"
+        args.extend((pattern, pattern))
+    source = " FROM qd_market_earnings e JOIN qd_earnings_listings l ON l.id = e.listing_id WHERE " + condition
+    with get_db_connection() as db:
+        cur = db.cursor()
+        # Rows, totals and coverage describe the same atomically published snapshot.
+        cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        cur.execute("SELECT COUNT(*) AS n" + source, tuple(args))
+        total = int(cur.fetchone()["n"])
+        offset = (page - 1) * page_size
+        records = []
+        if offset < total:
+            cur.execute("""SELECT l.id AS listing_id, l.market, l.exchange, l.symbol, l.name, l.segment,
+                           e.event_type, e.event_date, e.reporting_period, e.eps_estimate, e.revenue_estimate,
+                           e.estimate_currency, e.date_status, e.source, e.fetched_at""" + source +
+                        " ORDER BY e.event_date, l.market, l.exchange, l.symbol, e.id LIMIT ? OFFSET ?",
+                        (*args, page_size, offset))
+            records = cur.fetchall() or []
+        cur.execute("SELECT DISTINCT ON (market) * FROM qd_earnings_sync_runs ORDER BY market, id DESC")
+        latest = {r["market"]: r for r in cur.fetchall()}
+        cur.execute("""SELECT DISTINCT ON (market) * FROM qd_earnings_sync_runs
+                       WHERE status = 'success' ORDER BY market, id DESC""")
+        successful = {r["market"]: r for r in cur.fetchall()}
+        cur.execute("""SELECT l.market, COUNT(DISTINCT l.id) AS n FROM qd_market_earnings e
+                       JOIN qd_earnings_listings l ON l.id = e.listing_id
+                       WHERE l.is_active AND e.event_date BETWEEN ? AND ? GROUP BY l.market""", (today, end))
+        known = {r["market"]: int(r["n"]) for r in cur.fetchall()}
+        cur.close()
+    items = [{**dict(r), "event_date": _iso(r["event_date"]), "fetched_at": _iso(r["fetched_at"]),
+              "days_until": (r["event_date"] - today).days,
+              "eps_estimate": _float(r["eps_estimate"]), "revenue_estimate": _float(r["revenue_estimate"])} for r in records]
+    coverage = []
+    for current in markets:
+        success = successful.get(current)
+        last = latest.get(current)
+        status = "unavailable"
+        if success:
+            status = "ready"
+            now = datetime.now(timezone.utc)
+            if now - success["finished_at"].astimezone(timezone.utc) > MARKET_STALE_AFTER:
+                status = "stale"
+            if last and last["status"] == "failed":
+                status = "degraded"
+            elif last and last["status"] == "running":
+                # A killed worker must not appear to refresh forever.
+                status = "degraded" if now - last["started_at"].astimezone(timezone.utc) > MARKET_STALE_AFTER else "refreshing"
+        coverage.append({"market": current, "status": status, "mode": "best_effort", "venue_verified": False,
+                         "last_success_at": _iso(success["finished_at"]) if success else None,
+                         "window_end": _iso(success["window_end"]) if success else None,
+                         "window_complete": bool(success and success["window_end"] >= end),
+                         "known_in_window": known.get(current, 0),
+                         **{key: int(success[key]) if success else 0 for key in
+                            ("raw_listing_count", "listing_count", "excluded_count", "unmapped_count")}})
+    return {"items": items, "total": total, "page": page, "page_size": page_size, "coverage": coverage,
+            "sync_enabled": os.getenv("ENABLE_MARKET_EARNINGS_SYNC", "false").strip().lower() in {"1", "true", "yes", "on"}}
 
 _UPCOMING_SQL = """
 SELECT e.symbol, MAX(u.name) AS name, e.event_type, e.event_date, e.eps_estimate, e.revenue_estimate, e.fetched_at,

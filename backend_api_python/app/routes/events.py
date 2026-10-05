@@ -35,6 +35,19 @@ def get_upcoming_events():
     return _ok(events_read.list_upcoming_for_user(int(g.user_id), days=days))
 
 
+@events_blp.route("/market-calendar", methods=["GET"])
+@login_required
+def get_market_calendar():
+    """Cached best-effort US/UK earnings, with search, pagination and coverage."""
+    params = {"market": request.args.get("market", "all"), "days": _int_arg("days", 30),
+              "query": request.args.get("q", ""), "page": _int_arg("page", 1), "page_size": _int_arg("page_size", 50)}
+    try:
+        events_read.validate_market_calendar(**params)
+    except ValueError as exc:
+        return _bad(str(exc))
+    return _ok(events_read.list_market_earnings(**params))
+
+
 @events_blp.route("/digests", methods=["GET"])
 @login_required
 def get_event_digests():
