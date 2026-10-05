@@ -5991,6 +5991,281 @@ paths:
       - Settings
       operationId: postApiSettingsTestConnection
       x-visibility: internal
+  /api/settings/research-ingestion/overview:
+    get:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      summary: Read market directory, calendar and financial coverage without providers.
+      tags:
+      - Settings
+      security:
+      - HumanJWT: []
+      operationId: getApiSettingsResearchIngestionOverview
+      x-visibility: internal
+  /api/settings/research-ingestion/listings:
+    get:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Settings
+      security:
+      - HumanJWT: []
+      parameters:
+      - in: query
+        name: page
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          default: 1
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - in: query
+        name: market
+        schema:
+          type: string
+          enum:
+          - US
+          - UK
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+      - in: query
+        name: state
+        schema:
+          type: string
+          enum:
+          - ready
+          - partial
+          - stale
+          - no_data
+          - unsupported
+      operationId: getApiSettingsResearchIngestionListings
+      summary: Get Api Settings Research Ingestion Listings
+      x-visibility: internal
+  /api/settings/research-ingestion/jobs/{job_id}:
+    get:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Settings
+      security:
+      - HumanJWT: []
+      parameters:
+      - in: query
+        name: page
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          default: 1
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: integer
+      operationId: getApiSettingsResearchIngestionJobsJobId
+      summary: Get Api Settings Research Ingestion Jobs Job Id
+      x-visibility: internal
+    parameters:
+    - in: path
+      name: job_id
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+  /api/settings/research-ingestion/sync:
+    post:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Settings
+      security:
+      - HumanJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                market:
+                  type: string
+                  enum:
+                  - US
+                  - UK
+                request_id:
+                  type: string
+                  pattern: ^[A-Za-z0-9:_\-]{1,100}$
+                  description: Reuse after an ambiguous response; scoped to the authenticated
+                    administrator.
+                incremental:
+                  type: boolean
+                  default: true
+              required:
+              - market
+              - request_id
+      operationId: postApiSettingsResearchIngestionSync
+      summary: Post Api Settings Research Ingestion Sync
+      x-visibility: internal
+  /api/settings/research-ingestion/jobs/{job_id}/retry:
+    post:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Settings
+      security:
+      - HumanJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                request_id:
+                  type: string
+                  pattern: ^[A-Za-z0-9:_\-]{1,100}$
+                  description: Reuse after an ambiguous response; scoped to the authenticated
+                    administrator.
+              required:
+              - request_id
+      operationId: postApiSettingsResearchIngestionJobsJobIdRetry
+      summary: Post Api Settings Research Ingestion Jobs Job Id Retry
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: integer
+      x-visibility: internal
+    parameters:
+    - in: path
+      name: job_id
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+  /api/settings/research-ingestion/schedule:
+    put:
+      responses:
+        '400':
+          description: Invalid input
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HumanSuccessEnvelope'
+        '401':
+          description: Login required
+        '403':
+          description: Administrator required
+        '409':
+          description: Active job or request-id conflict
+      tags:
+      - Settings
+      security:
+      - HumanJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                market:
+                  type: string
+                  enum:
+                  - US
+                  - UK
+                enabled:
+                  type: boolean
+              required:
+              - market
+              - enabled
+      operationId: putApiSettingsResearchIngestionSchedule
+      summary: Put Api Settings Research Ingestion Schedule
+      x-visibility: internal
   /api/portfolio/positions:
     get:
       responses:

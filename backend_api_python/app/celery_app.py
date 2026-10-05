@@ -49,6 +49,7 @@ celery_app.conf.update(
         "app.tasks.fundamental_sync",
         "app.tasks.event_digest",
         "app.tasks.market_earnings",
+        "app.tasks.research_ingestion",
     ),
     task_routes={
         "quantdinger.tasks.earnings_calendar_sync": {"queue": "maintenance"},
@@ -61,6 +62,7 @@ celery_app.conf.update(
         "quantdinger.tasks.ai_calibration": {"queue": "maintenance"},
         "quantdinger.tasks.market_catalog_sync": {"queue": "maintenance"},
         "quantdinger.tasks.fundamental_sync_tick": {"queue": "maintenance"},
+        "quantdinger.tasks.research_ingestion_tick": {"queue": "maintenance"},
         "quantdinger.tasks.worker_heartbeat": {"queue": "maintenance"},
         "quantdinger.tasks.cleanup_runtime_metadata": {"queue": "maintenance"},
     },
@@ -77,6 +79,9 @@ celery_app.conf.update(
         "fundamental-sync": {
             "task": "quantdinger.tasks.fundamental_sync_tick",
             "schedule": 60.0,
+        },
+        "research-ingestion": {
+            "task": "quantdinger.tasks.research_ingestion_tick", "schedule": 60.0,
         },
         "expire-billed-agent-jobs": {
             "task": "quantdinger.tasks.expire_agent_jobs",

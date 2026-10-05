@@ -51,6 +51,20 @@ def test_openapi_shared_schemas(openapi_spec):
         assert name in schemas, f"missing shared schema {name}"
 
 
+def test_research_ingestion_openapi_contract(openapi_spec):
+    from app.openapi.register import enrich_spec
+    paths = enrich_spec(openapi_spec)['paths']
+    prefix = '/api/settings/research-ingestion'
+    for path, method in [('/overview','get'),('/listings','get'),('/jobs/{job_id}','get'),
+                         ('/sync','post'),('/jobs/{job_id}/retry','post'),('/schedule','put')]:
+        operation = paths[prefix + path][method]
+        assert operation['security'] == [{'HumanJWT': []}]
+        assert '403' in operation['responses']
+    schema = paths[prefix + '/sync']['post']['requestBody']['content']['application/json']['schema']
+    assert schema['required'] == ['market', 'request_id']
+    assert 'requester_id' not in schema['properties']
+
+
 def test_export_script_writes_yaml(tmp_path):
     """Regression: export_openapi.py produces parseable YAML."""
     import subprocess

@@ -132,6 +132,7 @@ class FundamentalDataService:
                 SELECT period_end, available_at, {', '.join(FUNDAMENTAL_FIELDS)}
                 FROM qd_fundamental_snapshots
                 WHERE market = ? AND symbol = ? AND available_at <= ?
+                  AND LEFT(source,15) <> 'research_yahoo_'
                 ORDER BY available_at, period_end, ingested_at
                 """,
                 (market, symbol, pd.Timestamp(end).date()),
@@ -223,6 +224,7 @@ class FundamentalDataService:
                        metadata_json, ingested_at
                 FROM qd_fundamental_snapshots
                 WHERE market = ? AND symbol = ? AND available_at <= ?
+                  AND LEFT(source,15) <> 'research_yahoo_'
                 ORDER BY CASE
                            WHEN jsonb_typeof(metadata_json -> 'analysisPayload') = 'object'
                             AND metadata_json -> 'analysisPayload' <> '{{}}'::jsonb
